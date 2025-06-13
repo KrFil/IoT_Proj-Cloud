@@ -24,6 +24,9 @@ Console.WriteLine("Podaj nazwę kolejki ErrorCode:");
 string queueErrorCode = Console.ReadLine();
 
 
+
+
+
 var serviceClient = ServiceClient.CreateFromConnectionString(iotHubConnection);
 var registryManager = RegistryManager.CreateFromConnectionString(iotHubConnection);
 var manager = new IoTHubManager(serviceClient, registryManager);
@@ -91,14 +94,21 @@ static async Task HandleErrorCountAsync(AlertMessage alert, IoTHubManager manage
     }
 }
 
-static Task HandleErrorCodeAsync(AlertMessage alert, IoTHubManager manager)
+static async Task HandleErrorCodeAsync(AlertMessage alert, IoTHubManager manager)
 {
+    var emailOperator = new EmailOperator(
+        "endpoint=https://communicationhost.europe.communication.azure.com/;accesskey=DYmdpJ9zUJXWHXQIa9GxQJN6vNfbbaHlxCMNeashvDPHjtxtnClEJQQJ99BFACULyCpmsDWMAAAAAZCSMODZ",
+        "DoNotReply@aa9b923c-525c-4ea9-9bf2-bff846003e42.azurecomm.net"
+    );
+
     Console.WriteLine($"Nowy kod błędu dla {alert.DeviceId}: {alert.ErrorCode}");
 
     if (alert.ErrorCode.HasValue)
     {
-        EmailService.SendEmail(alert.DeviceId, alert.ErrorCode.Value);
-    }
+        string subject = $"Błąd urządzenia {alert.DeviceId}";
+        string body = $"Wykryto nowy kod błędu {alert.ErrorCode} na urządzeniu {alert.DeviceId}.";
 
-    return Task.CompletedTask;
+        await emailOperator.SendAsync("ul0275926@edu.uni.lodz.pl", subject, body);
+    }
 }
+
