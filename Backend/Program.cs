@@ -8,32 +8,40 @@ using Newtonsoft.Json;
 using ServiceSdkDemo.Lib;
 using System.Text;
 
+Console.WriteLine("Podaj IoT Hub connection string:");
+string iotHubConnection = Console.ReadLine();
 
-const string serviceBusConnection = "Endpoint=sb://iiot-servicebus.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=CbYbNeLxiQ6a6tArB7K6ilQ2Hk4swhOFv+ASbNfQDGg=";   
-const string queueName = "alerts";
-const string iotHubConnection = "HostName=ZajAzure.azure-devices.net;SharedAccessKeyName=iothubowner;SharedAccessKey=OqKYb/zPEkZvkPTtyNvNV+rL8/X7k1zOmAIoTAznNmI=\r\n";
+Console.WriteLine("Podaj Service Bus connection string:");
+string serviceBusConnection = Console.ReadLine();
+
+Console.WriteLine("Podaj nazwę kolejki KPI:");
+string queueKpi = Console.ReadLine();
+
+Console.WriteLine("Podaj nazwę kolejki ErrorCount:");
+string queueErrorCount = Console.ReadLine();
+
+Console.WriteLine("Podaj nazwę kolejki ErrorCode:");
+string queueErrorCode = Console.ReadLine();
+
 
 var serviceClient = ServiceClient.CreateFromConnectionString(iotHubConnection);
-var sbClient = new ServiceBusClient(serviceBusConnection);
-var queueReceiver = sbClient.CreateReceiver(queueName);
 var registryManager = RegistryManager.CreateFromConnectionString(iotHubConnection);
-
-
 var manager = new IoTHubManager(serviceClient, registryManager);
+var sbClient = new ServiceBusClient(serviceBusConnection);
+
 
 var queues = new List<(string queueName, Func<AlertMessage, IoTHubManager, Task>)>
 {
-    ("alerts_prod", HandleKpiAsync),
-    ("alerts_err", HandleErrorCountAsync),
-    ("alerts_cod", HandleErrorCodeAsync)
+    (queueKpi, HandleKpiAsync),
+    (queueErrorCount, HandleErrorCountAsync),
+    (queueErrorCode, HandleErrorCodeAsync)
 };
 
-
-Console.WriteLine("Start receiving from 3 queues...");
+Console.WriteLine("START");
 
 var tasks = queues.Select(async q =>
 {
-    var receiver = sbClient.CreateReceiver(q.Item1);
+    var receiver = sbClient.CreateReceiver(q.queueName);
 
     while (true)
     {
@@ -43,12 +51,14 @@ var tasks = queues.Select(async q =>
         try
         {
             var alert = JsonConvert.DeserializeObject<AlertMessage>(msg.Body.ToString());
-            await q.Item2(alert, manager); 
+            alert.DeviceId = alert.DeviceId.Replace(" ", "_");
+
+            await q.Item2(alert, manager);
             await receiver.CompleteMessageAsync(msg);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Błąd w kolejce {q.Item1}: {ex.Message}");
+            Console.WriteLine($"Błąd w kolejce {q.queueName}: {ex.Message}");
         }
     }
 });
@@ -73,8 +83,11 @@ static async Task HandleErrorCountAsync(AlertMessage alert, IoTHubManager manage
 
     if (alert.ErrorCount.HasValue && alert.ErrorCount > 3)
     {
+        
         var deviceId_ = alert.DeviceId.Replace(" ", "_");
+        Console.WriteLine($"Próba EmergencyStop na {deviceId_}...");
         await manager.ExecuteDeviceMethod("EmergencyStop", deviceId_);
+        Console.WriteLine($"Poprawnie wywołano EmergencyStop na {deviceId_}");
     }
 }
 
